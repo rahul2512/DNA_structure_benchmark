@@ -1,0 +1,19 @@
+# Core Shiny for Python stack
+shiny>=0.10.0
+shinywidgets>=0.3.0
+
+# Data and numerics
+pandas>=2.0.0
+numpy>=1.26.0
+scipy>=1.11.0
+
+# Plotting
+# IMPORTANT: Kaleido 1.x (and plotly 7, which expects it) needs a separate Google Chrome install and
+# fails without it.  Kaleido 0.2.1 bundles its own engine, so PNG/PDF/SVG export works out of the box.
+plotly>=5.18.0,<7
+#kaleido==0.2.1
+
+# Chrome-free fallback renderer used automatically if Kaleido is unavailable
+matplotlib>=3.7
+
+htmltools>=0.5.0

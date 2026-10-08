@@ -1,0 +1,12 @@
+{
+    "https://api.shinyapps.io": {
+        "server_url": "https://api.shinyapps.io",
+        "filename": "/Users/rsharma/Library/CloudStorage/GoogleDrive-rs25.iitr@gmail.com/My Drive/Xray_vs_cgNAplus/tetramer_comparison",
+        "app_url": "https://rahul2512.shinyapps.io/tetramer_comparison/",
+        "app_id": "18124422",
+        "app_guid": null,
+        "title": "tetramer_comparison",
+        "app_mode": "python-shiny",
+        "app_store_version": 1
+    }
+}
