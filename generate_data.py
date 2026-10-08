@@ -152,6 +152,12 @@ var_cryoem = make_variance(1.06, 0.14, 22)
 var_md     = make_variance(0.90, 0.12, 23)
 var_cgna   = make_variance(1.12, 0.10, 24)
 
+# Cryo-EM + X-ray (placeholder): average of the two shape sets, pooled (reduced) variance.
+# Own RNG so the other datasets are unchanged.  Replace data/cryoem_xray.csv with real data.
+_rng_cx = np.random.default_rng(31)
+cx_data = 0.5 * (xray_data + ce_data) + _rng_cx.normal(0, 0.01, size=xray_data.shape) * sd_c[None, :]
+var_cx  = 0.5 * (var_xray + var_cryoem) * 0.75
+
 
 def _block(values, info):
     """Tetramer rows followed by dimer rows (mean over the 16 tetramers sharing the
@@ -178,10 +184,11 @@ def save_csv(shape, variance, filename):
 out_dir = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(out_dir, exist_ok=True)
 
-save_csv(xray_data, var_xray,   os.path.join(out_dir, "example_xray.csv"))
-save_csv(md_data,   var_md,     os.path.join(out_dir, "example_md.csv"))
-save_csv(ce_data,   var_cryoem, os.path.join(out_dir, "example_cryoem.csv"))
-save_csv(cg_data,   var_cgna,   os.path.join(out_dir, "example_cgnaplus.csv"))
+save_csv(xray_data, var_xray,   os.path.join(out_dir, "xray.csv"))
+save_csv(md_data,   var_md,     os.path.join(out_dir, "md.csv"))
+save_csv(ce_data,   var_cryoem, os.path.join(out_dir, "cryoem.csv"))
+save_csv(cg_data,   var_cgna,   os.path.join(out_dir, "cgnaplus.csv"))
+save_csv(cx_data,   var_cx,     os.path.join(out_dir, "cryoem_xray.csv"))
 
 # Quick sanity check
 from scipy.stats import pearsonr

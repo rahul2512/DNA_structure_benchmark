@@ -5,8 +5,8 @@ Compares sequence-resolved DNA structural coordinates across
 X-ray crystallography, molecular dynamics (MD) simulation,
 Cryo-EM, and coarse-grained (cgNA+) datasets.
 
-The built-in datasets (data/example_xray.csv, example_cryoem.csv,
-data/example_md.csv, example_cgnaplus.csv) are loaded
+The built-in datasets (data/xray.csv, cryoem.csv, cryoem_xray.csv,
+md.csv, cgnaplus.csv) are loaded
 automatically on startup so the app is immediately usable when
 deployed.  Users can:
   • Replace any built-in dataset by uploading their own CSV in the
@@ -73,10 +73,11 @@ def _load_builtin(filename: str, label: str):
     return df, label   # df may be None if validation failed, that's fine
 
 BUILTIN_DATASETS = {
-    "xray":   _load_builtin("example_xray.csv",     "X-ray"),
-    "cryoem": _load_builtin("example_cryoem.csv",   "Cryo-EM"),
-    "md":     _load_builtin("example_md.csv",        "MD"),
-    "cgdna":  _load_builtin("example_cgnaplus.csv",  "cgNA+"),
+    "xray":        _load_builtin("xray.csv",        "X-ray"),
+    "cryoem":      _load_builtin("cryoem.csv",      "Cryo-EM"),
+    "cryoem_xray": _load_builtin("cryoem_xray.csv", "Cryo-EM + X-ray"),
+    "md":          _load_builtin("md.csv",          "MD"),
+    "cgdna":       _load_builtin("cgnaplus.csv",    "cgNA+"),
 }
 # BUILTIN_DATASETS[key] = (df_or_None, label_str)
 
@@ -89,12 +90,31 @@ DATASET_MARKERS = {
     "xray":   dict(symbol="square",          color="#1a2744", size=6),
     "md":     dict(symbol="diamond",         color="#e63946", size=7),
     "cryoem": dict(symbol="hexagon",         color="#e9a100", size=7),
+    "cryoem_xray": dict(symbol="star",       color="#17a2b8", size=8),
     "cgdna":  dict(symbol="circle",          color="#2a9d8f", size=7),
     "custom": dict(symbol="triangle-up",     color="#9b59b6", size=7),
 }
 
-DEFAULT_FIG_W  = 760
+DEFAULT_FIG_W  = 720
 DEFAULT_FIG_H  = 540
+
+# Default figure settings per plot tab (width, height, tick/legend font size).
+TAB_DEFAULTS = {
+    "Scatter comparison":   dict(w=720,  h=540, xfont=10),
+    "Correlation overview": dict(w=720,  h=540, xfont=10),
+    "Difference plot":      dict(w=1200, h=540, xfont=6),
+    "Coordinate profile":   dict(w=1200, h=540, xfont=6),
+}
+
+LEGEND_CHOICES = {
+    "auto":  "Auto (best fit)",
+    "tr":    "Top right",
+    "tl":    "Top left",
+    "br":    "Bottom right",
+    "bl":    "Bottom left",
+    "above": "Above plot",
+    "right": "Outside right",
+}
 
 PLOT_LAYOUT_BASE = dict(
     paper_bgcolor="white",
@@ -196,6 +216,14 @@ body { font-family: 'Arial', sans-serif; background: #f0f2f7; margin:0; }
 /* Export buttons */
 .ctrl-bar .btn { font-size:0.76rem !important; padding:3px 7px !important; }
 
+/* control bar: groups wrap instead of overlapping on narrow windows */
+.ctrl-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:10px 16px; align-items:start; }
+.ctrl-span2 { grid-column: span 2; }
+.ctrl-4col  { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:0 8px; }
+
+/* wide figures (e.g. 1200 px) scroll sideways in the preview instead of being clipped */
+.shiny-ipywidget-output, .shiny-ipywidget-output .js-plotly-plot { overflow-x:auto !important; overflow-y:hidden !important; }
+
 /* ── KPI cards ── */
 .kpi-card {
   background:white; border-radius:7px; border:1px solid #dde2ec;
@@ -290,7 +318,7 @@ app_ui = ui.page_fluid(
         {"class": "app-header"},
         ui.div(
             ui.HTML('<div class="app-header-title">Web tool for comparing nucleic acid structural parameters</div>'),
-            ui.HTML('<div class="app-header-sub">Sequence-resolved DNA structural coordinates — X-ray · Cryo-EM · MD · cgNA+</div>'),
+            ui.HTML('<div class="app-header-sub">Sequence-resolved DNA structural coordinates — X-ray · Cryo-EM · Cryo-EM + X-ray · MD · cgNA+</div>'),
         ),
     ),
 
@@ -314,10 +342,10 @@ level of the DNA <strong>tetramer</strong> (the four-base context centred on the
 of interest), covering all 4<sup>4</sup> = 256 tetramers simultaneously.</p>
 
 <h3>Default datasets</h3>
-<p>Default DNA structural coordinates for <strong>X-ray, Cryo-EM, MD and cgNA+</strong> are loaded
+<p>Default DNA structural coordinates for <strong>X-ray, Cryo-EM, Cryo-EM + X-ray, MD and cgNA+</strong> are loaded
 automatically on start-up from the <code>data/</code> folder
-(<code>example_xray.csv</code>, <code>example_cryoem.csv</code>, <code>example_md.csv</code>,
-<code>example_cgnaplus.csv</code>). Any of them can be replaced by uploading your own CSV, and an
+(<code>xray.csv</code>, <code>cryoem.csv</code>, <code>cryoem_xray.csv</code>, <code>md.csv</code>,
+<code>cgnaplus.csv</code>). Any of them can be replaced by uploading your own CSV, and an
 additional custom dataset can be added alongside them.</p>
 
 <h3>Data information</h3>
@@ -358,12 +386,13 @@ tetramer, with dimer values for the central step.</p>
   <li>Coordinate names must match between the datasets being compared. Names containing keywords such as <em>buckle</em>, <em>propeller</em>, <em>twist</em>, <em>roll</em> are labelled Intra or Inter.</li>
   <li>Rows are always matched by sequence name, never by row order.</li>
 </ul>
-<p><strong>Download example files</strong> (each has 256 tetramer + 16 dimer rows for both Shape and Variance):</p>
+<p><strong>Download the default data files</strong> (each has 256 tetramer + 16 dimer rows for both Shape and Variance):</p>
 <ul>
-  <li><a href="example_xray.csv" download>example_xray.csv</a></li>
-  <li><a href="example_cryoem.csv" download>example_cryoem.csv</a></li>
-  <li><a href="example_md.csv" download>example_md.csv</a></li>
-  <li><a href="example_cgnaplus.csv" download>example_cgnaplus.csv</a></li>
+  <li><a href="xray.csv" download>xray.csv</a></li>
+  <li><a href="cryoem.csv" download>cryoem.csv</a></li>
+  <li><a href="cryoem_xray.csv" download>cryoem_xray.csv</a></li>
+  <li><a href="md.csv" download>md.csv</a></li>
+  <li><a href="cgnaplus.csv" download>cgnaplus.csv</a></li>
 </ul>
 
 <h3>Central-step classification</h3>
@@ -391,7 +420,7 @@ high cosine with low Pearson r indicates similar shape but a systematic offset.<
 <table>
   <tr><th>Tab</th><th>Description</th></tr>
   <tr><td>Scatter comparison</td><td>X vs Y scatter for one coordinate; Pearson r, cosine, regression, difference statistics and data table</td></tr>
-  <tr><td>Coordinate overview</td><td>Pearson r and cosine for every coordinate (bar chart and table), for the selected Info and level</td></tr>
+  <tr><td>Correlation overview</td><td>Pearson r and cosine for every coordinate (bar chart and table), for the selected Info and level</td></tr>
   <tr><td>Difference plot</td><td>A − B per tetramer or dimer for any two chosen datasets, sortable alphabetically or by absolute difference</td></tr>
   <tr><td>Coordinate profile</td><td>Raw coordinate values (shape or variance) per tetramer or dimer with all selected datasets overlaid; optional error bars of &plusmn;k&middot;&radic;variance around the Shape values</td></tr>
 </table>
@@ -415,7 +444,9 @@ multi-scale simulations&rdquo;</em>.</p>
 <a href="mailto:rs25.iitr@gmail.com">rs25.iitr@gmail.com</a>.</p>
 
 <h3>Source code</h3>
-<p>The source code is available on GitHub (<code>XX</code>) and can be downloaded and modified for
+<p>The source code is available on GitHub
+(<a href="https://github.com/rahul2512/DNA_structure_benchmark" target="_blank">github.com/rahul2512/DNA_structure_benchmark</a>)
+and can be downloaded and modified for
 bespoke analysis.</p>
 
 <div class="credit-footer">
@@ -445,6 +476,8 @@ bespoke analysis.</p>
                                   accept=[".csv"], multiple=False),
                     ui.input_file("file_cryoem", "Replace Cryo-EM (.csv)",
                                   accept=[".csv"], multiple=False),
+                    ui.input_file("file_cryoemxray", "Replace Cryo-EM + X-ray (.csv)",
+                                  accept=[".csv"], multiple=False),
                     ui.input_file("file_md",    "Replace MD (.csv)",
                                   accept=[".csv"], multiple=False),
                     ui.input_file("file_cgdna", "Replace cgNA+ (.csv)",
@@ -468,7 +501,8 @@ bespoke analysis.</p>
                 # ============================================================
                 ui.div(
                     {"class": "ctrl-bar"},
-                    ui.layout_columns(
+                    ui.div(
+                        {"class": "ctrl-grid"},
                         # Axes + coordinate
                         ui.div(
                             ui.HTML('<div class="ctrl-group-label">Axes &amp; Coordinate</div>'),
@@ -503,11 +537,16 @@ bespoke analysis.</p>
                         ),
                         # Figure
                         ui.div(
+                            {"class": "ctrl-span2"},
                             ui.HTML('<div class="ctrl-group-label">Figure</div>'),
-                            ui.input_numeric("fig_width",    "W",          DEFAULT_FIG_W, min=400, max=2000, step=50),
-                            ui.input_numeric("fig_height",   "H",          DEFAULT_FIG_H, min=300, max=1600, step=50),
-                            ui.input_numeric("fig_fontsize", "Axis font",  13, min=8, max=24, step=1),
-                            ui.input_numeric("fig_xfont",    "Tick/legend", 9, min=5, max=20, step=1),
+                            ui.div(
+                                {"class": "ctrl-4col"},
+                                ui.input_numeric("fig_width",    "Width",      DEFAULT_FIG_W, min=400, max=2400, step=50),
+                                ui.input_numeric("fig_height",   "Height",     DEFAULT_FIG_H, min=300, max=1600, step=50),
+                                ui.input_numeric("fig_fontsize", "Axis font",  13, min=8, max=24, step=1),
+                                ui.input_numeric("fig_xfont",    "Tick/legend", 10, min=4, max=20, step=1),
+                            ),
+                            ui.input_select("legend_pos", "Legend", choices=LEGEND_CHOICES, selected="auto"),
                         ),
                         # Figure labels + Filename + Export (combined column)
                         ui.div(
@@ -529,7 +568,6 @@ bespoke analysis.</p>
                                 ui.download_button("dl_csv", "CSV"),
                             ),
                         ),
-                        col_widths=[4, 2, 2, 2, 2],
                     ),
                 ),
 
@@ -551,7 +589,7 @@ bespoke analysis.</p>
 
                     # ---- Tab 2: Overview ----
                     ui.nav_panel(
-                        "Coordinate overview",
+                        "Correlation overview",
                         ui.HTML('<div class="info-box">Pearson r and cosine across all '
                                 'coordinates for the selected dataset pair, Info (Shape / Variance) and level.</div>'),
                         ui.tags.br(),
@@ -589,6 +627,7 @@ bespoke analysis.</p>
                                     "xray":     "X-ray value",
                                     "md":       "MD value",
                                     "cryoem":   "Cryo-EM value",
+                                    "cryoem_xray": "Cryo-EM + X-ray value",
                                     "cgdna":    "cgNA+ value",
                                     "stepclass":"Step class",
                                 },
@@ -660,6 +699,9 @@ def server(input: Inputs, output: Outputs, session: Session):
     def _cryoem(): return _parse_slot(input.file_cryoem, "Cryo-EM (uploaded)")
 
     @reactive.calc
+    def _cryoemxray(): return _parse_slot(input.file_cryoemxray, "Cryo-EM + X-ray (uploaded)")
+
+    @reactive.calc
     def _md():     return _parse_slot(input.file_md,     "MD (uploaded)")
 
     @reactive.calc
@@ -683,8 +725,10 @@ def server(input: Inputs, output: Outputs, session: Session):
         """
         avail = {}
 
-        for key, builtin_label in [("xray", "X-ray"), ("cryoem", "Cryo-EM"), ("md", "MD"), ("cgdna", "cgNA+")]:
-            slot_func = {"xray": _xray, "cryoem": _cryoem, "md": _md, "cgdna": _cgdna}[key]
+        for key, builtin_label in [("xray", "X-ray"), ("cryoem", "Cryo-EM"),
+                                       ("cryoem_xray", "Cryo-EM + X-ray"), ("md", "MD"), ("cgdna", "cgNA+")]:
+            slot_func = {"xray": _xray, "cryoem": _cryoem, "cryoem_xray": _cryoemxray,
+                         "md": _md, "cgdna": _cgdna}[key]
             uploaded_df, errs, _ = slot_func()
             if uploaded_df is not None and not errs:
                 # User uploaded a replacement — use it with the slot's default label
@@ -750,6 +794,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         for key, label, slot in [
             ("xray",  "X-ray", _xray),
             ("cryoem", "Cryo-EM", _cryoem),
+            ("cryoem_xray", "Cryo-EM + X-ray", _cryoemxray),
             ("md",    "MD",    _md),
             ("cgdna", "cgNA+", _cgdna),
         ]:
@@ -923,16 +968,46 @@ def server(input: Inputs, output: Outputs, session: Session):
     # Figure helpers and the scatter plot
     # ================================================================
 
-    @reactive.calc
-    def _fig_dims():
-        w   = _input_val("fig_width",    DEFAULT_FIG_W) or DEFAULT_FIG_W
-        h   = _input_val("fig_height",   DEFAULT_FIG_H) or DEFAULT_FIG_H
-        fs  = _input_val("fig_fontsize", 13) or 13
-        xfs = _input_val("fig_xfont",   9)  or 9
-        return int(w), int(h), int(fs), int(xfs)
+    # ---- per-tab figure settings (width, height, tick/legend font) ----
+    fig_store = reactive.Value({k: dict(v) for k, v in TAB_DEFAULTS.items()})
 
-    def _empty_fig(msg: str):
-        w, h, fs, xfs = _fig_dims()
+    def _active_tab() -> str:
+        return _input_val("plot_tab", "Scatter comparison") or "Scatter comparison"
+
+    @reactive.effect
+    @reactive.event(input.plot_tab, ignore_init=True)
+    def _load_tab_settings():
+        """Show the stored W / H / tick-font of the tab that was just opened."""
+        st = fig_store.get().get(_active_tab())
+        if st:
+            ui.update_numeric("fig_width", value=st["w"])
+            ui.update_numeric("fig_height", value=st["h"])
+            ui.update_numeric("fig_xfont", value=st["xfont"])
+
+    @reactive.effect
+    def _save_tab_settings():
+        """Remember what the user typed for the active tab."""
+        try:
+            w, h, xf = input.fig_width(), input.fig_height(), input.fig_xfont()
+        except Exception:
+            return
+        if w is None or h is None or xf is None:
+            return
+        with reactive.isolate():
+            tab, cur = _active_tab(), fig_store.get()
+            new = dict(w=int(w), h=int(h), xfont=int(xf))
+            if tab in cur and cur[tab] != new:
+                upd = dict(cur)
+                upd[tab] = new
+                fig_store.set(upd)
+
+    def _fig_dims(tab: str = "Scatter comparison"):
+        st = fig_store.get().get(tab) or TAB_DEFAULTS[tab]
+        fs = _input_val("fig_fontsize", 13) or 13
+        return int(st["w"]), int(st["h"]), int(fs), int(st["xfont"])
+
+    def _empty_fig(msg: str, tab: str = "Scatter comparison"):
+        w, h, fs, xfs = _fig_dims(tab)
         fig = go.Figure()
         fig.update_layout(
             **PLOT_LAYOUT_BASE,
@@ -942,12 +1017,90 @@ def server(input: Inputs, output: Outputs, session: Session):
         )
         return fig
 
+    # ---- legend placement: inside the plot, in the emptiest corner (or user-chosen) ----
+    _CORNER = {
+        "tr": dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
+        "tl": dict(x=0.01, y=0.99, xanchor="left",  yanchor="top"),
+        "br": dict(x=0.99, y=0.01, xanchor="right", yanchor="bottom"),
+        "bl": dict(x=0.01, y=0.01, xanchor="left",  yanchor="bottom"),
+    }
+
+    def _legend_points(fig):
+        """Approximate 'ink' of the figure as (x_numeric, y) arrays, for choosing a free corner."""
+        cats = {}
+        for t in fig.data:
+            xs = list(t.x) if t.x is not None else []
+            if xs and isinstance(xs[0], str):
+                for v in xs:
+                    cats.setdefault(v, len(cats))
+        X, Y = [], []
+        for t in fig.data:
+            if t.x is None or t.y is None:
+                continue
+            xs = list(t.x)
+            x = np.array([cats[v] for v in xs], float) if (xs and isinstance(xs[0], str)) else np.asarray(xs, float)
+            y = np.asarray(list(t.y), float)
+            if len(x) != len(y):
+                continue
+            if t.type == "bar":
+                for f in (1.0, 0.66, 0.33, 0.0):
+                    X.append(x); Y.append(y * f)
+            else:
+                X.append(x); Y.append(y)
+                ey = getattr(t, "error_y", None)
+                if ey is not None and ey.array is not None:
+                    e = np.nan_to_num(np.asarray(list(ey.array), float))
+                    X += [x, x]; Y += [y + e, y - e]
+        for sh in (fig.layout.shapes or []):
+            if sh.type == "line" and sh.x0 is not None and sh.x1 is not None:
+                X.append(np.linspace(sh.x0, sh.x1, 60)); Y.append(np.linspace(sh.y0, sh.y1, 60))
+        if not X:
+            return np.array([]), np.array([])
+        x, y = np.concatenate(X), np.concatenate(Y)
+        ok = np.isfinite(x) & np.isfinite(y)
+        return x[ok], y[ok]
+
+    def _best_corner(fig, labels, w, h, xfs, avoid=()):
+        x, y = _legend_points(fig)
+        if len(x) == 0:
+            return "tr"
+        plot_w, plot_h = max(w - 110, 200), max(h - 130, 150)
+        lw = min((max(len(l) for l in labels) * xfs * 0.58 + 40) / plot_w, 0.6)
+        lh = min((len(labels) * (xfs + 7) + 10) / plot_h, 0.6)
+        nx = (x - x.min()) / ((x.max() - x.min()) or 1.0)
+        ny = (y - y.min()) / ((y.max() - y.min()) or 1.0)
+        region = {
+            "tr": (nx > 1 - lw) & (ny > 1 - lh),
+            "tl": (nx < lw) & (ny > 1 - lh),
+            "bl": (nx < lw) & (ny < lh),
+            "br": (nx > 1 - lw) & (ny < lh),
+        }
+        cand = [c for c in ("tr", "tl", "bl", "br") if c not in avoid]
+        return min(cand, key=lambda c: (int(region[c].sum()), cand.index(c)))
+
+    def _place_legend(fig, tab: str, avoid=()):
+        labels = [t.name for t in fig.data if t.name and t.showlegend is not False]
+        if not labels:
+            return
+        w, h, fs, xfs = _fig_dims(tab)
+        pos = _input_val("legend_pos", "auto") or "auto"
+        if pos == "auto":
+            pos = _best_corner(fig, labels, w, h, xfs, avoid)
+        if pos == "right":
+            fig.update_layout(legend=dict(orientation="v", x=1.02, y=1, xanchor="left", yanchor="top"),
+                              margin=dict(r=200))
+        elif pos == "above":
+            fig.update_layout(legend=dict(orientation="h", x=0.5, y=1.01, xanchor="center", yanchor="bottom"),
+                              margin=dict(t=100), title=dict(y=0.97, yanchor="top"))
+        else:
+            fig.update_layout(legend=dict(orientation="v", **_CORNER.get(pos, _CORNER["tr"])))
+
     def _build_scatter():
         df, err = comparison_df()
-        w, h, fs, xfs = _fig_dims()
+        w, h, fs, xfs = _fig_dims("Scatter comparison")
 
         if err or df is None:
-            return _empty_fig(err or "No data")
+            return _empty_fig(err or "No data", "Scatter comparison")
 
         _, pair_x, pair_y, _ = selected_pair()
         lx = pair_x[0]; ly = pair_y[0]
@@ -1046,6 +1199,9 @@ def server(input: Inputs, output: Outputs, session: Session):
             yaxis_title=_yaxis_label,
         )
         fig.update_layout(legend_font_size=xfs)
+        fig.update_xaxes(tickfont=dict(size=xfs))
+        fig.update_yaxes(tickfont=dict(size=xfs))
+        _place_legend(fig, "Scatter comparison", avoid=("br",))   # bottom-right holds the r / cos box
         return fig
 
     @render_widget
@@ -1128,7 +1284,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         return stats, None
 
     # ================================================================
-    # Tab 2: Coordinate overview
+    # Tab 2: Correlation overview
     # ================================================================
 
     @render_widget
@@ -1137,9 +1293,9 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     def _build_overview():
         stats, err = overview_stats()
-        w, h, fs, xfs = _fig_dims()
+        w, h, fs, xfs = _fig_dims("Correlation overview")
         if err or stats is None:
-            return _empty_fig(err or "No data")
+            return _empty_fig(err or "No data", "Correlation overview")
 
         _, pair_x, pair_y, _ = selected_pair()
         lx = pair_x[0] if pair_x else "X"
@@ -1175,7 +1331,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             showlegend=False,
         )
         # Extend the y-axis range without spreading a duplicate yaxis key
-        fig.update_yaxes(range=[-0.1, 1.05])
+        fig.update_yaxes(range=[-0.1, 1.05], tickfont=dict(size=xfs))
         fig.update_xaxes(tickfont=dict(size=xfs))
         return fig
 
@@ -1256,9 +1412,9 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     def _build_difference():
         df, la, lb, err = diff_df()
-        w, h, fs, xfs = _fig_dims()
+        w, h, fs, xfs = _fig_dims("Difference plot")
         if err or df is None:
-            return _empty_fig(err or "No data")
+            return _empty_fig(err or "No data", "Difference plot")
 
         coord    = _input_val("coord", "")
         sort_by  = _input_val("diff_sort",  "abs_diff")
@@ -1313,6 +1469,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         auto_tick_fs = max(5, min(11, int(round(400 / max(n_bars, 1)))))
         tick_fs = max(auto_tick_fs, xfs)
         fig.update_xaxes(tickangle=90, tickfont=dict(size=tick_fs))
+        _place_legend(fig, "Difference plot")
         return fig
 
     # ================================================================
@@ -1327,6 +1484,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         choices = {
             "xray":   "X-ray",
             "cryoem": "Cryo-EM",
+            "cryoem_xray": "Cryo-EM + X-ray",
             "md":     "MD",
             "cgdna":  "cgNA+",
             "custom": custom_lbl,
@@ -1447,9 +1605,9 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     def _build_profile():
         d, err = profile_data()
-        w, h, fs, xfs = _fig_dims()
+        w, h, fs, xfs = _fig_dims("Coordinate profile")
         if d is None:
-            return _empty_fig(err or "No data")
+            return _empty_fig(err or "No data", "Coordinate profile")
         merged, avail, coord, k = d["merged"], d["avail"], d["coord"], d["k"]
         coord_disp = _coord_disp(coord)
 
@@ -1494,6 +1652,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         auto_tick_fs = max(5, min(11, int(round(400 / max(n_pts, 1)))))
         tick_fs = max(auto_tick_fs, xfs)
         fig.update_xaxes(tickangle=90, tickfont=dict(size=tick_fs))
+        _place_legend(fig, "Coordinate profile")
         return fig
 
     @render_widget
@@ -1504,12 +1663,9 @@ def server(input: Inputs, output: Outputs, session: Session):
     # Downloads - always export what the ACTIVE tab shows
     # ================================================================
 
-    def _active_tab() -> str:
-        return _input_val("plot_tab", "Scatter comparison") or "Scatter comparison"
-
     def _active_fig():
         builder = {
-            "Coordinate overview": _build_overview,
+            "Correlation overview": _build_overview,
             "Difference plot": _build_difference,
             "Coordinate profile": _build_profile,
         }.get(_active_tab(), _build_scatter)
@@ -1530,7 +1686,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         """(DataFrame, error) for the CSV export of the active tab."""
         tab = _active_tab()
         word = _seq_word().capitalize()
-        if tab == "Coordinate overview":
+        if tab == "Correlation overview":
             stats, err = overview_stats()
             return stats, err
         if tab == "Difference plot":

@@ -11,7 +11,7 @@ scipy>=1.11.0
 # IMPORTANT: Kaleido 1.x (and plotly 7, which expects it) needs a separate Google Chrome install and
 # fails without it.  Kaleido 0.2.1 bundles its own engine, so PNG/PDF/SVG export works out of the box.
 plotly>=5.18.0,<7
-#kaleido==0.2.1
+kaleido==0.2.1
 
 # Chrome-free fallback renderer used automatically if Kaleido is unavailable
 matplotlib>=3.7
