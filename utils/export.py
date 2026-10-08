@@ -238,7 +238,8 @@ def _matplotlib_bytes(fig, fmt: str) -> bytes:
         if lay.xaxis.range and not categorical:
             ax.set_xlim(*lay.xaxis.range)
         if lay.title and lay.title.text:
-            ax.set_title(_strip_html(lay.title.text), fontsize=fsz(lay.title.font, base_fs + 1))
+            _pad = 30 if (lay.legend and lay.legend.orientation == "h") else 6   # leave room for a legend above the plot
+            ax.set_title(_strip_html(lay.title.text), fontsize=fsz(lay.title.font, base_fs + 1), pad=_pad)
 
         # ---- annotations placed in paper coordinates (stats box, etc.) ----
         for a in (lay.annotations or []):
@@ -250,12 +251,25 @@ def _matplotlib_bytes(fig, fmt: str) -> bytes:
                     fontsize=fsz(a.font, base_fs * 0.8), color=_color(getattr(a.font, "color", None), "#555555"),
                     bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="#cccccc", alpha=0.9), zorder=5)
 
-        # ---- legend (outside right, like Plotly) ----
+        # ---- legend: follow the Plotly placement (inside a corner / above / outside right) ----
         if lay.showlegend is not False and handles:
-            lg = ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), frameon=True,
-                           fontsize=fsz(lay.legend.font, base_fs * 0.85))
+            L = lay.legend
+            lfs = fsz(L.font, base_fs * 0.85)
+            lx = float(L.x) if L.x is not None else 1.02
+            ly = float(L.y) if L.y is not None else 1.0
+            if L.orientation == "h":
+                lg = ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=len(handles),
+                               frameon=True, fontsize=lfs, borderaxespad=0.3)
+            elif 0.0 <= lx <= 1.0 and 0.0 <= ly <= 1.0:
+                vert = {"top": "upper", "bottom": "lower"}.get(L.yanchor, "center")
+                horiz = {"left": "left", "right": "right"}.get(L.xanchor, "center")
+                loc = "center" if (vert, horiz) == ("center", "center") else f"{vert} {horiz}".replace("center left", "center left")
+                lg = ax.legend(loc=loc, bbox_to_anchor=(lx, ly), frameon=True, fontsize=lfs, borderaxespad=0.0)
+            else:
+                lg = ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=True, fontsize=lfs)
             lg.get_frame().set_edgecolor("#cccccc")
             lg.get_frame().set_alpha(0.9)
+            lg.set_zorder(10)
 
         mfig.set_layout_engine("constrained")
         buf = io.BytesIO()
