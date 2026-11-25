@@ -5,8 +5,7 @@ Compares sequence-resolved DNA structural coordinates across
 X-ray crystallography, molecular dynamics (MD) simulation,
 Cryo-EM, and coarse-grained (cgNA+) datasets.
 
-The built-in datasets (data/xray.csv, cryoem.csv, cryoem_xray.csv,
-md.csv, cgnaplus.csv) are loaded
+The built-in datasets (see DEFAULT_DATASETS below; files in data/) are loaded
 automatically on startup so the app is immediately usable when
 deployed.  Users can:
   • Replace any built-in dataset by uploading their own CSV in the
@@ -48,6 +47,7 @@ from utils.metrics import (
     linear_regression,
     load_dataset,
     prepare_comparison,
+    KMER,
     describe_dataset,
     select_view,
     validate_dataset,
@@ -72,13 +72,20 @@ def _load_builtin(filename: str, label: str):
     df, warns = validate_dataset(df_raw, label)
     return df, label   # df may be None if validation failed, that's fine
 
-BUILTIN_DATASETS = {
-    "xray":        _load_builtin("xray.csv",        "X-ray"),
-    "cryoem":      _load_builtin("cryoem.csv",      "Cryo-EM"),
-    "cryoem_xray": _load_builtin("cryoem_xray.csv", "Cryo-EM + X-ray"),
-    "md":          _load_builtin("md.csv",          "MD"),
-    "cgdna":       _load_builtin("cgnaplus.csv",    "cgNA+"),
-}
+# ONE place that defines the default datasets: key, label shown in the app, file in data/,
+# and the marker used in the Coordinate-profile plot.  To rename or add a dataset, edit this list
+# (the upload slots, dropdowns, profile selector, About page and downloads follow automatically).
+DEFAULT_DATASETS = [
+    dict(key="xray",        label="X-ray",          file="xray.csv",          symbol="square",        color="#1a2744", size=6),
+    dict(key="cryoem",      label="Cryo-EM",        file="cryoem.csv",        symbol="hexagon",       color="#e9a100", size=7),
+    dict(key="cryoem_xray", label="Cryo-EM + X-ray", file="cryoem_xray.csv",  symbol="star",          color="#17a2b8", size=8),
+    dict(key="md_ps2",      label="MD (PS2)",       file="md_PS2.csv",        symbol="diamond",       color="#e63946", size=7),
+    dict(key="md_hexabc",   label="MD (hexABC)",    file="md_hexABC.csv",     symbol="triangle-down", color="#cc79a7", size=7),
+    dict(key="cgna_ps2",    label="cgNA+ (PS2)",    file="cgnaplus_PS2.csv",  symbol="circle",        color="#2a9d8f", size=7),
+]
+DS_LABEL = {d["key"]: d["label"] for d in DEFAULT_DATASETS}
+
+BUILTIN_DATASETS = {d["key"]: _load_builtin(d["file"], d["label"]) for d in DEFAULT_DATASETS}
 # BUILTIN_DATASETS[key] = (df_or_None, label_str)
 
 # ---------------------------------------------------------------------------
@@ -86,14 +93,9 @@ BUILTIN_DATASETS = {
 # ---------------------------------------------------------------------------
 
 # Per-dataset marker symbols and colours for the profile plot
-DATASET_MARKERS = {
-    "xray":   dict(symbol="square",          color="#1a2744", size=6),
-    "md":     dict(symbol="diamond",         color="#e63946", size=7),
-    "cryoem": dict(symbol="hexagon",         color="#e9a100", size=7),
-    "cryoem_xray": dict(symbol="star",       color="#17a2b8", size=8),
-    "cgdna":  dict(symbol="circle",          color="#2a9d8f", size=7),
-    "custom": dict(symbol="triangle-up",     color="#9b59b6", size=7),
-}
+DATASET_MARKERS = {d["key"]: dict(symbol=d["symbol"], color=d["color"], size=d["size"])
+                   for d in DEFAULT_DATASETS}
+DATASET_MARKERS["custom"] = dict(symbol="triangle-up", color="#9b59b6", size=7)
 
 DEFAULT_FIG_W  = 720
 DEFAULT_FIG_H  = 540
@@ -310,6 +312,10 @@ def _kpi(label: str, value: str, sub: str = "") -> str:
 # UI definition
 # ---------------------------------------------------------------------------
 
+_ABOUT_LABELS = ", ".join(d["label"] for d in DEFAULT_DATASETS)
+_ABOUT_FILES = ", ".join(f"<code>{d['file']}</code>" for d in DEFAULT_DATASETS)
+_ABOUT_LINKS = "\n".join(f'  <li><a href="{d["file"]}" download>{d["file"]}</a></li>' for d in DEFAULT_DATASETS)
+
 app_ui = ui.page_fluid(
     CUSTOM_CSS,
 
@@ -342,18 +348,18 @@ level of the DNA <strong>tetramer</strong> (the four-base context centred on the
 of interest), covering all 4<sup>4</sup> = 256 tetramers simultaneously.</p>
 
 <h3>Default datasets</h3>
-<p>Default DNA structural coordinates for <strong>X-ray, Cryo-EM, Cryo-EM + X-ray, MD and cgNA+</strong> are loaded
-automatically on start-up from the <code>data/</code> folder
-(<code>xray.csv</code>, <code>cryoem.csv</code>, <code>cryoem_xray.csv</code>, <code>md.csv</code>,
-<code>cgnaplus.csv</code>). Any of them can be replaced by uploading your own CSV, and an
-additional custom dataset can be added alongside them.</p>
+<p>Default DNA structural coordinates are loaded automatically on start-up from the
+<code>data/</code> folder: <strong>@@DEFAULT_LABELS@@</strong> (files @@FILES_CODE@@). The
+<code>PS2</code> and <code>hexABC</code> suffixes mark the protocol the data were produced or analysed
+with. Any default dataset can be replaced by uploading your own CSV, and an additional custom dataset
+can be added alongside them.</p>
 
 <h3>Data information</h3>
 <p><strong>Info = Shape</strong> holds the mean (ground-state) value of each structural coordinate;
-<strong>Info = Variance</strong> holds the variance of the same coordinate (the diagonal of its covariance).
-Both are available at the <strong>tetramer</strong> level (256 sequences) and at the <strong>dimer</strong>
-level (16 sequences), and the <em>Info</em> and <em>Level</em> selectors in the control bar switch every
-plot and table between them.</p>
+<strong>Info = Std</strong> holds the standard deviation of the same coordinate (the square root of the
+diagonal of its covariance). Both are available at the <strong>tetramer</strong> level (256 sequences)
+and at the <strong>dimer</strong> level (16 sequences), and the <em>Info</em> and <em>Level</em>
+selectors in the control bar switch every plot and table between them.</p>
 <h4>cgNA+</h4>
 <p>cgNA+ is a sequence-dependent coarse-grained model of double-stranded nucleic acids. Each
 configuration is described by internal coordinates of rigid bases and phosphate groups, and the
@@ -361,38 +367,35 @@ model is a Gaussian (multivariate normal) distribution over these coordinates wh
 fitted to all-atom molecular dynamics data. For any sequence it therefore returns a ground-state
 shape (the mean) and a stiffness matrix whose inverse is the covariance; the stiffness couples
 neighbouring steps, which is how it captures the non-local sequence dependence of DNA mechanics. The
-cgNA+ values used here are the mean (Shape) and the variance (Variance) of the coordinates per
+cgNA+ values used here are the mean (Shape) and the standard deviation (Std) of the coordinates per
 tetramer, with dimer values for the central step.</p>
 
 <h3>Input file format for custom comparisons</h3>
 <p>Each dataset is a plain <code>.csv</code> file. Besides the sequence and the coordinates, it has an
-<code>Info</code> column that says whether a row holds the <em>Shape</em> or the <em>Variance</em>:</p>
+<code>Info</code> column that says whether a row holds the <em>Shape</em> (mean) or the <em>Std</em>
+(standard deviation):</p>
 <table>
-  <tr><th>Tetramer</th><th>Info</th><th>Coord_1</th><th>Coord_2</th><th>…</th><th>Coord_18</th></tr>
+  <tr><th>kmer</th><th>Info</th><th>Coord_1</th><th>Coord_2</th><th>…</th><th>Coord_18</th></tr>
   <tr><td>AAAA</td><td>Shape</td><td>0.123</td><td>35.4</td><td>…</td><td>3.38</td></tr>
   <tr><td>AAAC</td><td>Shape</td><td>0.087</td><td>34.8</td><td>…</td><td>3.35</td></tr>
   <tr><td>…</td><td>…</td><td>…</td><td>…</td><td>…</td><td>…</td></tr>
-  <tr><td>AAAA</td><td>Variance</td><td>0.041</td><td>0.88</td><td>…</td><td>0.002</td></tr>
+  <tr><td>AAAA</td><td>Std</td><td>0.152</td><td>0.94</td><td>…</td><td>0.045</td></tr>
   <tr><td>…</td><td>…</td><td>…</td><td>…</td><td>…</td><td>…</td></tr>
   <tr><td>AA</td><td>Shape</td><td>0.101</td><td>35.0</td><td>…</td><td>3.36</td></tr>
-  <tr><td>AA</td><td>Variance</td><td>0.039</td><td>0.91</td><td>…</td><td>0.002</td></tr>
+  <tr><td>AA</td><td>Std</td><td>0.197</td><td>0.95</td><td>…</td><td>0.044</td></tr>
 </table>
 <ul>
-  <li>The <strong>first column must be named <code>Tetramer</code></strong> and the second <code>Info</code>. <code>Info</code> is either <code>Shape</code> or <code>Variance</code>; if the column is missing, every row is read as Shape.</li>
-  <li>The level of a row is set by the length of its sequence: <strong>4 letters = tetramer</strong>, <strong>2 letters = dimer</strong> (letters from <code>A</code>, <code>C</code>, <code>G</code>, <code>T</code>). Tetramer, dimer, Shape and Variance rows can all share one file, using the same coordinate columns.</li>
+  <li>The <strong>first column must be named <code>kmer</code></strong> (the older name <code>Tetramer</code> is still read) and the second <code>Info</code>. <code>Info</code> is either <code>Shape</code> or <code>Std</code>; if the column is missing, every row is read as Shape. Files that still use <code>Variance</code> are rejected: take the square root and label the rows <code>Std</code>.</li>
+  <li>The level of a row is set by the length of its sequence: <strong>4 letters = tetramer</strong>, <strong>2 letters = dimer</strong> (letters from <code>A</code>, <code>C</code>, <code>G</code>, <code>T</code>). Tetramer, dimer, Shape and Std rows can all share one file, using the same coordinate columns.</li>
   <li>A sequence may appear once per <code>Info</code> value; the same sequence and Info twice is rejected.</li>
   <li>Per Info value, 256 tetramer rows and 16 dimer rows are expected. Fewer rows are accepted with a warning and only shared sequences are compared. A file with no rows for the selected Info or level is left out of that view.</li>
   <li>All other columns must be numeric; names are detected automatically. Missing values (NaN) are allowed and excluded pairwise.</li>
   <li>Coordinate names must match between the datasets being compared. Names containing keywords such as <em>buckle</em>, <em>propeller</em>, <em>twist</em>, <em>roll</em> are labelled Intra or Inter.</li>
   <li>Rows are always matched by sequence name, never by row order.</li>
 </ul>
-<p><strong>Download the default data files</strong> (each has 256 tetramer + 16 dimer rows for both Shape and Variance):</p>
+<p><strong>Download the default data files</strong> (each has 256 tetramer + 16 dimer rows for both Shape and Std; use them as templates, for example <code>md_hexABC.csv</code> for a new MD protocol):</p>
 <ul>
-  <li><a href="xray.csv" download>xray.csv</a></li>
-  <li><a href="cryoem.csv" download>cryoem.csv</a></li>
-  <li><a href="cryoem_xray.csv" download>cryoem_xray.csv</a></li>
-  <li><a href="md.csv" download>md.csv</a></li>
-  <li><a href="cgnaplus.csv" download>cgnaplus.csv</a></li>
+@@FILE_LINKS@@
 </ul>
 
 <h3>Central-step classification</h3>
@@ -405,7 +408,7 @@ Each base is a purine (A, G) or pyrimidine (C, T), giving four classes of 64 tet
   <tr><td>YR</td><td>Pyrimidine / Purine</td><td>CA, CG, TA, TG</td></tr>
   <tr><td>YY</td><td>Pyrimidine / Pyrimidine</td><td>CC, CT, TC, TT</td></tr>
 </table>
-<p>Use the <em>Filters</em> in the control bar to choose the <strong>Info</strong> (Shape or Variance), the <strong>Level</strong> (tetramer or dimer) and, optionally, one step class to restrict any plot to.</p>
+<p>Use the <em>Filters</em> in the control bar to choose the <strong>Info</strong> (Shape or Std), the <strong>Level</strong> (tetramer or dimer) and, optionally, one step class to restrict any plot to.</p>
 
 <h3>Statistical metrics</h3>
 <h4>Pearson correlation (r)</h4>
@@ -422,7 +425,7 @@ high cosine with low Pearson r indicates similar shape but a systematic offset.<
   <tr><td>Scatter comparison</td><td>X vs Y scatter for one coordinate; Pearson r, cosine, regression, difference statistics and data table</td></tr>
   <tr><td>Correlation overview</td><td>Pearson r and cosine for every coordinate (bar chart and table), for the selected Info and level</td></tr>
   <tr><td>Difference plot</td><td>A − B per tetramer or dimer for any two chosen datasets, sortable alphabetically or by absolute difference</td></tr>
-  <tr><td>Coordinate profile</td><td>Raw coordinate values (shape or variance) per tetramer or dimer with all selected datasets overlaid; optional error bars of &plusmn;k&middot;&radic;variance around the Shape values</td></tr>
+  <tr><td>Coordinate profile</td><td>Raw coordinate values (shape or std) per tetramer or dimer with all selected datasets overlaid; optional error bars of &plusmn;k&middot;std around the Shape values</td></tr>
 </table>
 
 <h3>Export</h3>
@@ -452,7 +455,7 @@ bespoke analysis.</p>
 <div class="credit-footer">
   Created by <strong>Rahul Sharma</strong>
 </div>
-"""),
+""".replace("@@DEFAULT_LABELS@@", _ABOUT_LABELS).replace("@@FILES_CODE@@", _ABOUT_FILES).replace("@@FILE_LINKS@@", _ABOUT_LINKS)),
             ),
         ),
 
@@ -472,16 +475,8 @@ bespoke analysis.</p>
                         '<b>replace</b> any built-in, or add a custom dataset below.'
                         '</div>'
                     ),
-                    ui.input_file("file_xray",  "Replace X-ray (.csv)",
-                                  accept=[".csv"], multiple=False),
-                    ui.input_file("file_cryoem", "Replace Cryo-EM (.csv)",
-                                  accept=[".csv"], multiple=False),
-                    ui.input_file("file_cryoemxray", "Replace Cryo-EM + X-ray (.csv)",
-                                  accept=[".csv"], multiple=False),
-                    ui.input_file("file_md",    "Replace MD (.csv)",
-                                  accept=[".csv"], multiple=False),
-                    ui.input_file("file_cgdna", "Replace cgNA+ (.csv)",
-                                  accept=[".csv"], multiple=False),
+                    *[ui.input_file(f"file_{d['key']}", f"Replace {d['label']} (.csv)",
+                                    accept=[".csv"], multiple=False) for d in DEFAULT_DATASETS],
                     ui.div(
                         {"class": "custom-upload-block"},
                         ui.HTML('<div class="sb-title">Custom dataset (optional)</div>'),
@@ -515,7 +510,7 @@ bespoke analysis.</p>
                             ui.HTML('<div class="ctrl-group-label">Filters</div>'),
                             ui.input_select(
                                 "info", "Info",
-                                choices={"Shape": "Shape", "Variance": "Variance"},
+                                choices={"Shape": "Shape", "Std": "Std (standard deviation)"},
                                 selected="Shape",
                             ),
                             ui.input_select(
@@ -591,7 +586,7 @@ bespoke analysis.</p>
                     ui.nav_panel(
                         "Correlation overview",
                         ui.HTML('<div class="info-box">Pearson r and cosine across all '
-                                'coordinates for the selected dataset pair, Info (Shape / Variance) and level.</div>'),
+                                'coordinates for the selected dataset pair, Info (Shape / Std) and level.</div>'),
                         ui.tags.br(),
                         output_widget("overview_bar_plot"),
                         ui.tags.br(),
@@ -623,19 +618,15 @@ bespoke analysis.</p>
                             ui.input_select(
                                 "profile_sort", "Sort by",
                                 choices={
-                                    "alpha":    "Alphabetical",
-                                    "xray":     "X-ray value",
-                                    "md":       "MD value",
-                                    "cryoem":   "Cryo-EM value",
-                                    "cryoem_xray": "Cryo-EM + X-ray value",
-                                    "cgdna":    "cgNA+ value",
-                                    "stepclass":"Step class",
+                                    "alpha": "Alphabetical",
+                                    **{d["key"]: f"{d['label']} value" for d in DEFAULT_DATASETS},
+                                    "stepclass": "Step class",
                                 },
                                 selected="alpha",
                             ),
                             ui.output_ui("profile_dataset_selector_ui"),
                             ui.div(
-                                ui.input_checkbox("profile_err", "Error bars  (± k·√variance)", value=False),
+                                ui.input_checkbox("profile_err", "Error bars  (± k·std)", value=False),
                                 ui.input_numeric("profile_k", "k (σ multiplier)", 1, min=0.5, max=5, step=0.5),
                             ),
                             col_widths=[3, 5, 4],
@@ -692,20 +683,13 @@ def server(input: Inputs, output: Outputs, session: Session):
             return None, warns, []
         return df, [], warns
 
-    @reactive.calc
-    def _xray():   return _parse_slot(input.file_xray,   "X-ray (uploaded)")
+    def _make_slot(key: str, label: str):
+        @reactive.calc
+        def _slot():
+            return _parse_slot(input[f"file_{key}"], f"{label} (uploaded)")
+        return _slot
 
-    @reactive.calc
-    def _cryoem(): return _parse_slot(input.file_cryoem, "Cryo-EM (uploaded)")
-
-    @reactive.calc
-    def _cryoemxray(): return _parse_slot(input.file_cryoemxray, "Cryo-EM + X-ray (uploaded)")
-
-    @reactive.calc
-    def _md():     return _parse_slot(input.file_md,     "MD (uploaded)")
-
-    @reactive.calc
-    def _cgdna():  return _parse_slot(input.file_cgdna,  "cgNA+ (uploaded)")
+    SLOTS = {d["key"]: _make_slot(d["key"], d["label"]) for d in DEFAULT_DATASETS}
 
     @reactive.calc
     def _custom():
@@ -725,11 +709,9 @@ def server(input: Inputs, output: Outputs, session: Session):
         """
         avail = {}
 
-        for key, builtin_label in [("xray", "X-ray"), ("cryoem", "Cryo-EM"),
-                                       ("cryoem_xray", "Cryo-EM + X-ray"), ("md", "MD"), ("cgdna", "cgNA+")]:
-            slot_func = {"xray": _xray, "cryoem": _cryoem, "cryoem_xray": _cryoemxray,
-                         "md": _md, "cgdna": _cgdna}[key]
-            uploaded_df, errs, _ = slot_func()
+        for d in DEFAULT_DATASETS:
+            key, builtin_label = d["key"], d["label"]
+            uploaded_df, errs, _ = SLOTS[key]()
             if uploaded_df is not None and not errs:
                 # User uploaded a replacement — use it with the slot's default label
                 avail[key] = (builtin_label, uploaded_df)
@@ -751,14 +733,14 @@ def server(input: Inputs, output: Outputs, session: Session):
         return "dim" if _input_val("level", "tet") == "dim" else "tet"
 
     def _info() -> str:
-        return "Variance" if _input_val("info", "Shape") == "Variance" else "Shape"
+        return "Std" if _input_val("info", "Shape") == "Std" else "Shape"
 
     def _seq_word(plural: bool = False) -> str:
         w = "dimer" if _level() == "dim" else "tetramer"
         return w + ("s" if plural else "")
 
     def _coord_disp(coord: str) -> str:
-        """Coordinate label used in titles/axes, e.g. 'Buckle (Intra), variance'."""
+        """Coordinate label used in titles/axes, e.g. 'Buckle (Intra), std'."""
         lbl = f"{coord} {get_coord_type_label(coord)}".strip()
         return f"{lbl}, {_info().lower()}"
 
@@ -769,7 +751,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.calc
     def available_datasets():
         """
-        Datasets that have rows for the selected Info (Shape / Variance) at the selected
+        Datasets that have rows for the selected Info (Shape / Std) at the selected
         level (tetramer = 4-letter rows, dimer = 2-letter rows).  Everything downstream
         uses this view, so each plot/table automatically follows the filters.
         """
@@ -790,15 +772,10 @@ def server(input: Inputs, output: Outputs, session: Session):
     def dataset_status_ui():
         msgs = []
 
-        # Report upload status for the three replaceable slots
-        for key, label, slot in [
-            ("xray",  "X-ray", _xray),
-            ("cryoem", "Cryo-EM", _cryoem),
-            ("cryoem_xray", "Cryo-EM + X-ray", _cryoemxray),
-            ("md",    "MD",    _md),
-            ("cgdna", "cgNA+", _cgdna),
-        ]:
-            df, errs, warns = slot()
+        # Report upload status for every replaceable slot
+        for d in DEFAULT_DATASETS:
+            label = d["label"]
+            df, errs, warns = SLOTS[d["key"]]()
             for e in errs:
                 msgs.append(ui.HTML(f'<div class="err-box">&#10006; {e}</div>'))
             for w in warns:
@@ -1122,7 +1099,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                 continue
             sub = df[df["Step_class"] == cls]
             hover = [
-                f"<b>{_seq_word().capitalize()}:</b> {row['Tetramer']}<br>"
+                f"<b>{_seq_word().capitalize()}:</b> {row[KMER]}<br>"
                 f"<b>Central step:</b> {row['Central_step']} ({row['Step_class']})<br>"
                 f"<b>{lx}:</b> {row[lx]:.4f}<br>"
                 f"<b>{ly}:</b> {row[ly]:.4f}<br>"
@@ -1249,9 +1226,9 @@ def server(input: Inputs, output: Outputs, session: Session):
         if pair_x is None:
             return render.DataTable(pd.DataFrame())
         lx = pair_x[0]; ly = pair_y[0]
-        cols = ["Tetramer","Central_step","Step_class", lx, ly, "Difference","Abs_difference"]
+        cols = [KMER,"Central_step","Step_class", lx, ly, "Difference","Abs_difference"]
         cols = [c for c in cols if c in df.columns]
-        tbl = df[cols].copy().rename(columns={"Tetramer": _seq_word().capitalize()})
+        tbl = df[cols].copy().rename(columns={KMER: _seq_word().capitalize()})
         for c in [lx, ly, "Difference", "Abs_difference"]:
             if c in tbl.columns:
                 tbl[c] = tbl[c].round(5)
@@ -1424,7 +1401,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         if sort_by == "abs_diff":
             data = data.sort_values("Abs_difference", ascending=False)
         else:
-            data = data.sort_values("Tetramer")
+            data = data.sort_values(KMER)
 
         fig = go.Figure()
         cls_filt = _input_val("step_class_filter", "All")
@@ -1435,13 +1412,13 @@ def server(input: Inputs, output: Outputs, session: Session):
             if sub.empty:
                 continue
             hover = [
-                f"<b>{row['Tetramer']}</b> ({row['Central_step']}, {row['Step_class']})<br>"
+                f"<b>{row[KMER]}</b> ({row['Central_step']}, {row['Step_class']})<br>"
                 f"{la} − {lb}: {row['Difference']:.4f}<br>"
                 f"{la}: {row[la]:.4f}   {lb}: {row[lb]:.4f}"
                 for _, row in sub.iterrows()
             ]
             fig.add_trace(go.Bar(
-                x=sub["Tetramer"], y=sub["Difference"],
+                x=sub[KMER], y=sub["Difference"],
                 name=STEP_CLASS_LABELS.get(cls, cls),
                 marker_color=CLASS_COLOURS[cls],
                 opacity=0.85,
@@ -1473,7 +1450,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         return fig
 
     # ================================================================
-    # Coordinate profile (with optional +/- k*sqrt(variance) error bars)
+    # Coordinate profile (with optional +/- k*std error bars)
     # ================================================================
 
     @output
@@ -1481,14 +1458,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     def profile_dataset_selector_ui():
         # Always offer every dataset slot; slots without data are simply skipped in the plot.
         custom_lbl = (_input_val("custom_label", "Custom") or "Custom").strip() or "Custom"
-        choices = {
-            "xray":   "X-ray",
-            "cryoem": "Cryo-EM",
-            "cryoem_xray": "Cryo-EM + X-ray",
-            "md":     "MD",
-            "cgdna":  "cgNA+",
-            "custom": custom_lbl,
-        }
+        choices = {**DS_LABEL, "custom": custom_lbl}
         # Keep the user's current ticks across re-renders; default = everything ticked
         with reactive.isolate():
             prev = _input_val("profile_datasets", None)
@@ -1513,8 +1483,8 @@ def server(input: Inputs, output: Outputs, session: Session):
         """Table behind the Coordinate-profile plot (also used for the CSV export).
 
         Returns (dict, None) or (None, message).  With error bars enabled (Info = Shape),
-        `merged` also holds one `<key>__sd` column = k * sqrt(variance) for every dataset
-        that has Variance rows at the selected level.
+        `merged` also holds one `<key>__sd` column = k * std for every dataset
+        that has Std rows at the selected level.
         """
         avail = available_datasets()
         coord = _input_val("coord", None)
@@ -1541,10 +1511,10 @@ def server(input: Inputs, output: Outputs, session: Session):
             return None, f"Coordinate '{coord}' not found in any selected dataset."
 
         merged = pd.concat(frames.values(), axis=1).dropna(how="all")
-        merged.index.name = "Tetramer"
+        merged.index.name = KMER
         merged = merged.reset_index()
-        merged["Central_step"] = merged["Tetramer"].apply(lambda t: classify_central_step(t)[0])
-        merged["Step_class"] = merged["Tetramer"].apply(lambda t: classify_central_step(t)[1])
+        merged["Central_step"] = merged[KMER].apply(lambda t: classify_central_step(t)[0])
+        merged["Step_class"] = merged[KMER].apply(lambda t: classify_central_step(t)[1])
 
         cls_filt = _input_val("step_class_filter", "All")
         if cls_filt != "All":
@@ -1554,13 +1524,13 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         sort_by = _input_val("profile_sort", "alpha")
         if sort_by == "stepclass":
-            merged = merged.sort_values(["Step_class", "Central_step", "Tetramer"])
+            merged = merged.sort_values(["Step_class", "Central_step", KMER])
         elif sort_by in frames:
             merged = merged.sort_values(sort_by, ascending=True)
         else:
-            merged = merged.sort_values("Tetramer")
+            merged = merged.sort_values(KMER)
 
-        # ---- error bars: k * sqrt(variance) of the same dataset / level / coordinate ----
+        # ---- error bars: k * std of the same dataset / level / coordinate ----
         want_err = bool(_input_val("profile_err", False))
         try:
             k = float(_input_val("profile_k", 1) or 1)
@@ -1572,12 +1542,12 @@ def server(input: Inputs, output: Outputs, session: Session):
         if err_on:
             full = all_datasets()
             for key in frames:
-                var_df = select_view(full[key][1], _level(), "Variance") if key in full else None
+                var_df = select_view(full[key][1], _level(), "Std") if key in full else None
                 if var_df is None or coord not in var_df.columns:
                     missing.append(avail[key][0])
                     continue
-                sd = np.sqrt(var_df[coord].clip(lower=0))
-                merged[f"{key}__sd"] = k * sd.reindex(merged["Tetramer"]).values
+                sd = var_df[coord].clip(lower=0)          # Info = Std: already a standard deviation
+                merged[f"{key}__sd"] = k * sd.reindex(merged[KMER]).values
                 have_sd.append(key)
 
         return dict(merged=merged, keys=[k_ for k_ in selected_ds if k_ in frames], avail=avail,
@@ -1590,16 +1560,16 @@ def server(input: Inputs, output: Outputs, session: Session):
         if not _input_val("profile_err", False):
             return ui.HTML("")
         if _info() != "Shape":
-            return ui.HTML('<div class="warn-box">Error bars (&plusmn;k&middot;&radic;variance) are drawn '
+            return ui.HTML('<div class="warn-box">Error bars (&plusmn;k&middot;std) are drawn '
                            'around the <b>Shape</b> values. Set Info to Shape to use them.</div>')
         d, err = profile_data()
         if d is None:
             return ui.HTML("")
-        msg = (f"Error bars: &plusmn;{d['k']:g} &times; &radic;variance "
+        msg = (f"Error bars: &plusmn;{d['k']:g} &times; std "
                f"({_seq_word()} level, same dataset).")
         box = "info-box"
         if d["missing"]:
-            msg += " No Variance rows for: " + ", ".join(d["missing"]) + " (no error bars drawn)."
+            msg += " No Std rows for: " + ", ".join(d["missing"]) + " (no error bars drawn)."
             box = "warn-box"
         return ui.HTML(f'<div class="{box}">{msg}</div>')
 
@@ -1619,14 +1589,14 @@ def server(input: Inputs, output: Outputs, session: Session):
             sd_col = merged[f"{key}__sd"] if has_sd else None
             hover = []
             for i, (_, row) in enumerate(merged.iterrows()):
-                txt = (f"<b>{row['Tetramer']}</b><br>"
+                txt = (f"<b>{row[KMER]}</b><br>"
                        f"Central step: {row['Central_step']} ({row['Step_class']})<br>"
                        f"{label}: {row[key]:.4f}")
                 if has_sd and pd.notna(sd_col.iloc[i]):
                     txt += f" &plusmn; {sd_col.iloc[i]:.4f}"
                 hover.append(txt)
             trace = dict(
-                x=merged["Tetramer"], y=merged[key], mode="markers", name=label,
+                x=merged[KMER], y=merged[key], mode="markers", name=label,
                 marker=dict(symbol=mk["symbol"], color=mk["color"], size=mk["size"],
                             opacity=0.80, line=dict(width=0.6, color="white")),
                 hovertemplate="%{customdata}<extra></extra>", customdata=hover,
@@ -1638,7 +1608,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         title = f"Coordinate profile — {coord_disp}"
         if d["have_sd"]:
-            title += f"  (error bars: ±{k:g}·√variance)"
+            title += f"  (error bars: ±{k:g}·std)"
         fig.update_layout(
             **PLOT_LAYOUT_BASE,
             font=dict(**_FONT_BASE, size=fs),
@@ -1693,19 +1663,19 @@ def server(input: Inputs, output: Outputs, session: Session):
             df, la, lb, err = diff_df()
             if df is None:
                 return None, err
-            cols = ["Tetramer", "Central_step", "Step_class", lb, la, "Difference", "Abs_difference"]
-            return df[[c for c in cols if c in df.columns]].rename(columns={"Tetramer": word}), None
+            cols = [KMER, "Central_step", "Step_class", lb, la, "Difference", "Abs_difference"]
+            return df[[c for c in cols if c in df.columns]].rename(columns={KMER: word}), None
         if tab == "Coordinate profile":
             d, err = profile_data()
             if d is None:
                 return None, err
             m = d["merged"].copy()
-            ren = {"Tetramer": word}
+            ren = {KMER: word}
             for key in d["keys"]:
                 ren[key] = d["avail"][key][0]
                 if f"{key}__sd" in m.columns:
-                    ren[f"{key}__sd"] = f"{d['avail'][key][0]} (±{d['k']:g}·sqrt variance)"
-            cols = ["Tetramer", "Central_step", "Step_class"]
+                    ren[f"{key}__sd"] = f"{d['avail'][key][0]} (±{d['k']:g}·std)"
+            cols = [KMER, "Central_step", "Step_class"]
             for key in d["keys"]:
                 cols.append(key)
                 if f"{key}__sd" in m.columns:
@@ -1716,8 +1686,8 @@ def server(input: Inputs, output: Outputs, session: Session):
             return None, err
         _, pair_x, pair_y, _ = selected_pair()
         lx, ly = pair_x[0], pair_y[0]
-        cols = ["Tetramer", "Central_step", "Step_class", lx, ly, "Difference", "Abs_difference"]
-        return df[[c for c in cols if c in df.columns]].rename(columns={"Tetramer": word}), None
+        cols = [KMER, "Central_step", "Step_class", lx, ly, "Difference", "Abs_difference"]
+        return df[[c for c in cols if c in df.columns]].rename(columns={KMER: word}), None
 
     def _dl_fname(ext: str) -> str:
         base = (_input_val("dl_filename", "tetramer_plot") or "tetramer_plot").strip()

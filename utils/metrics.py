@@ -2,7 +2,7 @@
 utils/metrics.py
 ================
 Core data-loading, validation, classification, and statistical functions
-for the Tetramer Structural Comparison application.
+for the nucleic-acid structural-parameter comparison web tool.
 
 All functions are pure (no Shiny/UI dependencies) so they can be tested
 independently of the application layer.
@@ -23,7 +23,9 @@ from scipy.stats import pearsonr
 # ---------------------------------------------------------------------------
 
 VALID_BASES = set("ACGT")
-INFORMATION_TYPES = ("Shape", "Variance")
+INFORMATION_TYPES = ("Shape", "Std")
+KMER = "kmer"                       # name of the sequence column in input files and internal tables
+KMER_ALIASES = ("kmer", "tetramer")  # accepted (case-insensitive) names for that column
 PURINES = set("AG")
 PYRIMIDINES = set("CT")
 
@@ -80,8 +82,8 @@ def validate_dataset(df: pd.DataFrame, name: str = "Dataset") -> tuple[Optional[
 
     Checks
     ------
-    * First column is 'Tetramer'
-    * Optional 'Info' column: 'Shape' (mean structural parameters) or 'Variance'.
+    * Sequence column is named 'kmer' (the legacy name 'Tetramer' is still accepted)
+    * Optional 'Info' column: 'Shape' (mean structural parameters) or 'Std' (standard deviation).
       If absent, every row is treated as Shape.
     * Every sequence is a 4-base (tetramer) or 2-base (dimer) DNA string using A/C/G/T;
       tetramer and dimer rows may be mixed in the same file
@@ -99,34 +101,32 @@ def validate_dataset(df: pd.DataFrame, name: str = "Dataset") -> tuple[Optional[
     if df is None or df.empty:
         return None, [f"{name}: empty or unreadable file."]
 
-    # ---- Tetramer column ----
-    cols = list(df.columns)
-    if cols[0].strip() != "Tetramer":
-        # Try to find it anywhere
-        lower_cols = [c.strip() for c in cols]
-        if "Tetramer" in lower_cols:
-            idx = lower_cols.index("Tetramer")
-            # Move it to front
-            new_order = [cols[idx]] + [c for i, c in enumerate(cols) if i != idx]
-            df = df[new_order]
-            df.columns = ["Tetramer"] + list(df.columns[1:])
-            warnings.append(f"{name}: 'Tetramer' column moved to first position.")
-        else:
-            return None, [f"{name}: first column must be 'Tetramer'. Got '{cols[0]}'."]
+    # ---- sequence column: 'kmer' (legacy alias 'Tetramer') ----
+    lower_cols = [str(c).strip().lower() for c in df.columns]
+    hit = next((i for i, c in enumerate(lower_cols) if c in KMER_ALIASES), None)
+    if hit is None:
+        return None, [f"{name}: the sequence column must be named '{KMER}'. Found '{df.columns[0]}' as first column."]
+    old_name = df.columns[hit]
+    if str(old_name).strip() != KMER:
+        warnings.append(f"{name}: column '{old_name}' was read as '{KMER}'.")
+    new_order = [old_name] + [c for i, c in enumerate(df.columns) if i != hit]
+    df = df[new_order].copy()
+    df.columns = [KMER] + list(df.columns[1:])
+    if hit != 0:
+        warnings.append(f"{name}: '{KMER}' column moved to first position.")
 
-    df = df.copy()
-    df["Tetramer"] = df["Tetramer"].astype(str).str.strip().str.upper()
+    df[KMER] = df[KMER].astype(str).str.strip().str.upper()
 
-    # ---- Validate tetramer strings ----
-    invalid_mask = ~df["Tetramer"].apply(_is_valid_tetramer)
+    # ---- Validate k-mer strings ----
+    invalid_mask = ~df[KMER].apply(_is_valid_tetramer)
     if invalid_mask.any():
-        bad = df.loc[invalid_mask, "Tetramer"].tolist()[:5]
+        bad = df.loc[invalid_mask, KMER].tolist()[:5]
         return None, [
             f"{name}: invalid sequences found (e.g. {bad}). "
             "Each entry must be 4 (tetramer) or 2 (dimer) characters from A/C/G/T."
         ]
 
-    # ---- Info column (Shape / Variance) ----
+    # ---- Info column (Shape / Std) ----
     info_col = next((c for c in df.columns if str(c).strip().lower() in ("info", "information")), None)
     if info_col is None:
         df["Info"] = "Shape"
@@ -136,21 +136,25 @@ def validate_dataset(df: pd.DataFrame, name: str = "Dataset") -> tuple[Optional[
         df["Info"] = df["Info"].astype(str).str.strip().str.capitalize()
         bad_info = sorted(set(df["Info"]) - set(INFORMATION_TYPES))
         if bad_info:
+            hint = ""
+            if any(b.lower() == "variance" for b in bad_info):
+                hint = (" Files with 'Variance' rows are no longer supported: replace those values by "
+                        "their square root (the standard deviation) and set Info to 'Std'.")
             return None, [
                 f"{name}: invalid Info values {bad_info}. "
-                f"Allowed values: {', '.join(INFORMATION_TYPES)}."
+                f"Allowed values: {', '.join(INFORMATION_TYPES)}." + hint
             ]
-        order = ["Tetramer", "Info"] + [c for c in df.columns if c not in ("Tetramer", "Info")]
+        order = [KMER, "Info"] + [c for c in df.columns if c not in (KMER, "Info")]
         df = df[order]
 
     # ---- Duplicates ----
-    dupes = df.duplicated(subset=["Tetramer", "Info"])
+    dupes = df.duplicated(subset=[KMER, "Info"])
     if dupes.any():
-        dup_list = df.loc[dupes, ["Tetramer", "Info"]].astype(str).agg("/".join, axis=1).tolist()[:5]
+        dup_list = df.loc[dupes, [KMER, "Info"]].astype(str).agg("/".join, axis=1).tolist()[:5]
         return None, [f"{name}: duplicate (sequence, Info) rows found: {dup_list}."]
 
     # ---- Row count warnings (per Info type) ----
-    seq_len = df["Tetramer"].str.len()
+    seq_len = df[KMER].str.len()
     for info in INFORMATION_TYPES:
         sel = df["Info"] == info
         n_tet, n_dim = int((sel & (seq_len == 4)).sum()), int((sel & (seq_len == 2)).sum())
@@ -160,7 +164,7 @@ def validate_dataset(df: pd.DataFrame, name: str = "Dataset") -> tuple[Optional[
             warnings.append(f"{name}: expected 16 {info} dimers, found {n_dim}.")
 
     # ---- Numeric coordinate columns ----
-    coord_cols = [c for c in df.columns if c not in ("Tetramer", "Info")]
+    coord_cols = [c for c in df.columns if c not in (KMER, "Info")]
     non_numeric = []
     for c in coord_cols:
         if not pd.api.types.is_numeric_dtype(df[c]):
@@ -176,12 +180,12 @@ def validate_dataset(df: pd.DataFrame, name: str = "Dataset") -> tuple[Optional[
         warnings.append(f"{name}: dropping non-numeric columns: {non_numeric}.")
         df = df.drop(columns=non_numeric)
 
-    coord_cols_clean = [c for c in df.columns if c not in ("Tetramer", "Info")]
+    coord_cols_clean = [c for c in df.columns if c not in (KMER, "Info")]
     if not coord_cols_clean:
         return None, [f"{name}: no numeric coordinate columns found after cleaning."]
 
-    # Set Tetramer as index for easy merging later
-    df = df.set_index("Tetramer")
+    # Set the k-mer as index for easy merging later
+    df = df.set_index(KMER)
 
     return df, warnings
 
@@ -196,7 +200,7 @@ def select_view(df: Optional[pd.DataFrame], level: str, info: str) -> Optional[p
     Return the numeric table for one (level, information) combination, indexed by sequence.
 
     level : "tet" (4-letter rows) or "dim" (2-letter rows)
-    info  : "Shape" or "Variance" (value of the Info column)
+    info  : "Shape" or "Std" (value of the Info column)
     Returns None when the dataset has no such rows.
     """
     if df is None or "Info" not in df.columns:
@@ -228,7 +232,7 @@ def check_dataset_compatibility(
     name_b: str = "Dataset B",
 ) -> tuple[list[str], list[str], list[str]]:
     """
-    Compare coordinate column sets of two validated DataFrames (Tetramer as index).
+    Compare coordinate column sets of two validated DataFrames (k-mer as index).
 
     Returns
     -------
@@ -271,13 +275,13 @@ def classify_central_step(tetramer: str) -> tuple[str, str]:
 def add_classification_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add 'Central_step' and 'Step_class' columns to a long-form DataFrame
-    that has a 'Tetramer' column (or Tetramer as index).
+    that has a 'kmer' column (or the k-mer as index).
 
-    Works whether Tetramer is a column or the index.
+    Works whether the k-mer is a column or the index.
     """
     df = df.copy()
-    if "Tetramer" in df.columns:
-        tetramers = df["Tetramer"]
+    if KMER in df.columns:
+        tetramers = df[KMER]
     else:
         tetramers = df.index.to_series()
 
@@ -298,11 +302,11 @@ def prepare_comparison(
     name_y: str = "Y",
 ) -> pd.DataFrame:
     """
-    Merge two validated DataFrames (Tetramer as index) on the shared tetramer set
+    Merge two validated DataFrames (k-mer as index) on the shared tetramer set
     for a single coordinate column.
 
     Returns a flat DataFrame with columns:
-        Tetramer, Central_step, Step_class, X_val, Y_val, Difference, Abs_difference
+        kmer, Central_step, Step_class, X_val, Y_val, Difference, Abs_difference
     """
     # Only shared tetramers
     shared_idx = df_x.index.intersection(df_y.index)
@@ -311,7 +315,7 @@ def prepare_comparison(
     y_vals = df_y.loc[shared_idx, coord]
 
     cmp = pd.DataFrame({
-        "Tetramer":    shared_idx,
+        KMER:          shared_idx,
         f"{name_x}":   x_vals.values,
         f"{name_y}":   y_vals.values,
     })
@@ -436,7 +440,7 @@ def calculate_heatmap_stats(
 
     # Build a merged frame with classification
     merged = pd.DataFrame(index=shared_idx)
-    merged.index.name = "Tetramer"
+    merged.index.name = KMER
     merged["Central_step"] = merged.index.to_series().apply(lambda t: classify_central_step(t)[0])
     merged["Step_class"]   = merged.index.to_series().apply(lambda t: classify_central_step(t)[1])
 

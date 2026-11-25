@@ -1,8 +1,9 @@
 """
-Generate synthetic example datasets for the tetramer structural comparison app.
+Generate synthetic PLACEHOLDER datasets for the nucleic-acid structural-parameter comparison tool.
 
-Three datasets: X-ray (reference + noise), MD (scaled + bias + noise),
-CGDNA (different scale + bias + noise). Fixed seed for reproducibility.
+Output files (data/): xray.csv, cryoem.csv, cryoem_xray.csv, md_PS2.csv, md_hexABC.csv, cgnaplus_PS2.csv.
+Format: kmer, Info (Shape | Std), 18 coordinate columns; 256 tetramer + 16 dimer rows per Info value.
+Fixed seeds for reproducibility.  Replace the files with real data before publishing.
 """
 
 from itertools import product
@@ -128,7 +129,7 @@ for c, (_, _, noise_std) in enumerate(coord_ranges):
 # Save CSVs
 # ------------------------------------------------------------------
 # ------------------------------------------------------------------
-# Variance data (placeholder): per-coordinate variance for every tetramer.
+# Std data (placeholder): per-coordinate standard deviation for every tetramer.
 # Shared sequence-dependent structure + dataset-specific scale and noise.
 # ------------------------------------------------------------------
 rng_v = np.random.default_rng(11)
@@ -158,25 +159,39 @@ _rng_cx = np.random.default_rng(31)
 cx_data = 0.5 * (xray_data + ce_data) + _rng_cx.normal(0, 0.01, size=xray_data.shape) * sd_c[None, :]
 var_cx  = 0.5 * (var_xray + var_cryoem) * 0.75
 
+# MD with the hexABC protocol (placeholder): own RNG streams, so the other datasets are unchanged.
+_rng_hx = np.random.default_rng(41)
+_scale_hx = _rng_hx.uniform(0.94, 1.01, size=N_COORDS)
+_bias_hx = _rng_hx.normal(0, 0.025, size=N_COORDS)
+_noise_hx = np.random.default_rng(42)
+hx_data = np.zeros_like(reference)
+for c, (_, _, noise_std) in enumerate(coord_ranges):
+    hx_data[:, c] = _scale_hx[c] * reference[:, c] + _bias_hx[c] + _noise_hx.normal(0, noise_std * 1.4, size=256)
+var_hx = make_variance(0.95, 0.13, 25)
+
+# Standard deviations actually written to the files (Info = Std)
+std_xray, std_cryoem, std_md, std_cgna, std_cx, std_hx = (
+    np.sqrt(v) for v in (var_xray, var_cryoem, var_md, var_cgna, var_cx, var_hx))
+
 
 def _block(values, info):
-    """Tetramer rows followed by dimer rows (mean over the 16 tetramers sharing the
+    """k-mer rows followed by dimer rows (mean over the 16 tetramers sharing the
     central dinucleotide) for one Info type."""
     tet = pd.DataFrame(values, columns=coord_names)
-    tet.insert(0, "Tetramer", tetramers)
-    centre = tet["Tetramer"].str[1:3]
+    tet.insert(0, "kmer", tetramers)
+    centre = tet["kmer"].str[1:3]
     dim = tet.groupby(centre)[coord_names].mean().reset_index()
-    dim.columns = ["Tetramer"] + coord_names
+    dim.columns = ["kmer"] + coord_names
     out = pd.concat([tet, dim], ignore_index=True)
     out.insert(1, "Info", info)
     return out
 
 
-def save_csv(shape, variance, filename):
-    """Columns: Tetramer, Info, <18 coordinates>.
-    Row order: Shape tetramers, Variance tetramers, Shape dimers, Variance dimers."""
-    s, v = _block(shape, "Shape"), _block(variance, "Variance")
-    is_t = lambda d: d["Tetramer"].str.len() == 4
+def save_csv(shape, std, filename):
+    """Columns: kmer, Info, <18 coordinates>.
+    Row order: Shape tetramers, Std tetramers, Shape dimers, Std dimers."""
+    s, v = _block(shape, "Shape"), _block(std, "Std")
+    is_t = lambda d: d["kmer"].str.len() == 4
     df = pd.concat([s[is_t(s)], v[is_t(v)], s[~is_t(s)], v[~is_t(v)]], ignore_index=True)
     df.to_csv(filename, index=False, float_format="%.8f")
     print(f"Saved {filename}  shape={df.shape}")
@@ -184,15 +199,16 @@ def save_csv(shape, variance, filename):
 out_dir = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(out_dir, exist_ok=True)
 
-save_csv(xray_data, var_xray,   os.path.join(out_dir, "xray.csv"))
-save_csv(md_data,   var_md,     os.path.join(out_dir, "md.csv"))
-save_csv(ce_data,   var_cryoem, os.path.join(out_dir, "cryoem.csv"))
-save_csv(cg_data,   var_cgna,   os.path.join(out_dir, "cgnaplus.csv"))
-save_csv(cx_data,   var_cx,     os.path.join(out_dir, "cryoem_xray.csv"))
+save_csv(xray_data, std_xray,   os.path.join(out_dir, "xray.csv"))
+save_csv(ce_data,   std_cryoem, os.path.join(out_dir, "cryoem.csv"))
+save_csv(cx_data,   std_cx,     os.path.join(out_dir, "cryoem_xray.csv"))
+save_csv(md_data,   std_md,     os.path.join(out_dir, "md_PS2.csv"))
+save_csv(hx_data,   std_hx,     os.path.join(out_dir, "md_hexABC.csv"))
+save_csv(cg_data,   std_cgna,   os.path.join(out_dir, "cgnaplus_PS2.csv"))
 
 # Quick sanity check
 from scipy.stats import pearsonr
 for c_idx, name in enumerate(coord_names):
     r, _ = pearsonr(xray_data[:, c_idx], md_data[:, c_idx])
     print(f"  Xray vs MD  {name:20s}  r={r:.4f}")
-print("Example datasets generated successfully.")
+print("Placeholder datasets generated successfully.")
